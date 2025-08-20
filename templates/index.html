@@ -2,9 +2,19 @@
 <html>
   <head>
     <title>Digit Reader</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
       body {
-        text-align: center;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        gap: 40px;
         font-family: Arial, sans-serif;
         margin-top: 30px;
       }
@@ -13,8 +23,12 @@
         background: white;
         cursor: crosshair;
       }
+      .controls {
+        text-align: center;
+        margin-top: 10px;
+      }
       button {
-        margin: 10px;
+        margin: 5px;
         padding: 10px 20px;
         font-size: 16px;
         border-radius: 8px;
@@ -29,21 +43,36 @@
       #result {
         font-size: 20px;
         font-weight: bold;
-        margin-top: 15px;
+        margin-top: 10px;
+        text-align: center;
+      }
+      #chartContainer {
+        width: 400px;
       }
     </style>
   </head>
   <body>
-    <h2>Draw a digit (0-9)</h2>
-    <canvas id="canvas" width="280" height="280"></canvas><br />
-    <button onclick="clearCanvas()">Reset</button>
-    <p id="result">Prediction:</p>
+    <!-- Left: Drawing area -->
+    <div>
+      <h2>Draw a digit (0–9)</h2>
+      <canvas id="canvas" width="280" height="280"></canvas>
+      <div class="controls">
+        <button onclick="clearCanvas()">Reset</button>
+      </div>
+      <p id="result">Prediction:</p>
+    </div>
+
+    <!-- Right: Probability Chart -->
+    <div id="chartContainer">
+      <h2>Prediction Probability</h2>
+      <canvas id="probChart"></canvas>
+    </div>
 
     <script>
       const canvas = document.getElementById("canvas");
       const ctx = canvas.getContext("2d");
 
-      // Initial setup
+      // Setup canvas
       ctx.lineWidth = 20;
       ctx.lineCap = "round";
       ctx.strokeStyle = "black";
@@ -65,30 +94,54 @@
         ctx.stroke();
         ctx.beginPath();
         ctx.moveTo(e.offsetX, e.offsetY);
-        predict(); // 🔥 predict while drawing
+        predict(); // realtime prediction
       }
 
       function clearCanvas() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "white";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.beginPath();
-        document.getElementById("result").innerText = "Prediction: ";
+        document.getElementById("result").innerText = "Prediction:";
+        updateChart(new Array(10).fill(0));
+      }
+
+      // Chart.js setup
+      const ctxChart = document.getElementById("probChart").getContext("2d");
+      const probChart = new Chart(ctxChart, {
+        type: "bar",
+        data: {
+          labels: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+          datasets: [
+            {
+              label: "Probability",
+              data: new Array(10).fill(0),
+              backgroundColor: "rgba(75, 192, 192, 0.6)",
+            },
+          ],
+        },
+        options: {
+          scales: { y: { beginAtZero: true, max: 1 } },
+        },
+      });
+
+      function updateChart(probabilities) {
+        probChart.data.datasets[0].data = probabilities;
+        probChart.update();
       }
 
       async function predict() {
         const imgData = canvas.toDataURL("image/png");
         const res = await fetch("/predict", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: imgData }),
         });
         const data = await res.json();
-        document.getElementById("result").innerText =
-          "Prediction: " + data.prediction;
+        if (data.prediction !== undefined) {
+          document.getElementById("result").innerText =
+            "Prediction: " + data.prediction;
+          updateChart(data.probabilities); // update the bar chart
+        }
       }
     </script>
   </body>
